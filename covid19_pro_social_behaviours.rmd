@@ -1,0 +1,1012 @@
+---
+title: "FIT3152 Assignment 1"
+name: "Russell Kong Yen Teng"
+student ID: "32872461"
+---
+
+This is the R notebook for Assignment 1 for FIT3152, we are setting up the table as follows
+
+```{r echo = FALSE}
+#Setting up the libraries
+#install.packages("dplyr")
+#install.packages("ggplot2")
+#install.packages("lattice")
+#install.packages("ggpubr")
+#install.packages("reshape2")
+knitr::opts_chunk$set(echo = FALSE)
+library("dplyr")
+library("ggplot2")
+library("lattice")
+library("ggpubr")
+library("reshape2")
+library("cluster")
+library("tidyr")
+```
+
+Question 1(a)
+
+```{r}
+rm(list = ls())
+set.seed(32872461) # XXXXXXXX = your student ID
+cvbase = read.csv("PsyCoronaBaselineExtract.csv")
+cvbase <- cvbase[sample(nrow(cvbase), 40000), ] # 40000 rows
+dim(cvbase) # Returns the dimensions of the dataset in rows and columns
+```
+
+Overall there are 40 thousand entries from people from all across the world that contributed towards this survey with 54 of unique identifiers.
+
+```{r}
+str(cvbase)
+```
+
+Out of all the attributes from the data set, all of them are integers with a range of from negative-positive integers or 1-n positive integers. The only exception is coded_country with is based on a string of which the people are from.
+
+```{r echo = TRUE}
+countries = unique(cvbase$coded_country)
+length(countries)
+```
+
+From the data set above, we are able to see that there are 112 unique countries in the dataset.
+
+```{r}
+cvbase[,21:30][is.na(cvbase[,21:30])] = 0
+
+par(mfrow=c(1,2))
+feel1 = boxplot(cvbase[1:5], xlab = "Affect to Feelings (1)")
+feel2 = boxplot(cvbase[6:11], xlab = "Affect to Feelings (2)")
+par(mfrow=c(1,2))
+likelihood = boxplot(cvbase[12:13], xlab = "Likelihood")
+social_discontent = boxplot(cvbase[14:16], xlab = "Societal Discontent")
+
+par(mfrow=c(1,1))
+job_insecurity = boxplot(cvbase[17:20], xlab = "Job Insecurity")
+employ_status = boxplot(cvbase[21:30], xlab = "Employment Status")
+
+
+```
+
+From the data set we are able to find the affects of the COVID-19 pandemic to the people who took the survey. These includes how it affected their feelings from a numerical value of 1 to 5 from 1 being Very slightly or not at all to 5 being Extremely, the likelihood that they think they will get the coronavirus and their personal situation getting worse due to the coronavirus on a 1 - 8 scale from 1 being exceptionally unlikely and 8 being already happened.
+
+We also dive into societal discontent with society on a -2 - 2 scale, Job insecurity on a similar -2-2 scale. For Employment status we have a variety of different columns with 1 stating the status that they are in, and NA on all other columns otherwise. For this we will be changing the dataset of the employment status to be 1 if it is what best describes their employment status, and 0 instead of NA otherwise to help with further analysis of the data. This is because we will be omitting NA values from the dataset for processing later on.
+
+```{r}
+par(mfrow=c(1,2))
+money_strain = boxplot(cvbase[31:33], xlab ="Perceived Financial Strain" )
+disempowerment = boxplot(cvbase[34:36], xlab = "Disempowerment")
+par(mfrow=c(1,2))
+sat = boxplot(cvbase[37:39], xlab = "Live Satisfaction")
+norms = boxplot(cvbase[40:44], xlab = "Corona Community Injuctive Norms")
+par(mfrow=c(1,2))
+trust = boxplot(cvbase[45:46], xlab = "Trust in Government")
+gender = boxplot(cvbase[47], xlab = "Gender")
+par(mfrow=c(1,2))
+age = boxplot(cvbase[48], xlab = "Age")
+edu = boxplot(cvbase[49], xlab = "Education")
+
+```
+
+Perceived Financial Strain and Disempowerment is also classified into -2 to 2 range. Followed by Live Satisfaction, where happy is from a 1-10 range, lifeSat from 1 - 7 range, and MLQ from a -3 to 3 range. For Corona Community Injuctive Norms, c19NormShould and c19NormDo follow the same -3 to 3 scale, while c19IsStrict, c19IsPunish and c19IsOrg uses a 1 to 6 scale. Next is how people trust the government, and their community on a 1 to 5 scale.
+
+Next displays the person's age gender with 1 being female, 2 being male and 3 being other. Next is the age group on a 1 to 8 scale with 1 being the young adult category (18-24) and 8 being the elderly category (85+) with each value being a range of 10 years with the 1st value being the only exception. Afterwards is Education on where we see a 1 to 7 scale with 1 being having primary education as the highest level of education received and 7 being getting a PhD degree,
+
+For statistics we also kept track of gender, age, education and country. Lastly we ask them on their thoughts on Corona ProSocial Behaviour which includes the following details/columns:
+
+"I am willing to:
+
+• help others who suffer from coronavirus." (c19ProSo01)
+
+• make donations to help others that suffer from coronavirus." (c19ProSo02)
+
+• protect vulnerable groups from coronavirus even at my own expense." (c19ProSo03)
+
+• make personal sacrifices to prevent the spread of coronavirus." (c19ProSo04)
+
+```{r}
+pro_so = boxplot(cvbase[51:54], xlab = "Corona ProSocial Behavior (Global)")
+```
+
+on a scale of -3-3. With -3 being Strongly disagree and 3 being Strongly agree.
+
+For this analysis we will be diving deeper into country-level differences in predictors of pro-social behaviours.
+
+Question 1(b)
+
+To note, we have changed all NA values of employment status to 0 and for all other NA values, we will be omitting them when analyzing rows that has its column values as NA. We also will be handling the data in such that any response that is not from Ukraine will be called "Global" Data from now on. As se
+
+Question 2(a)
+
+Our focus country is Ukraine. Lets separate their values with the following code
+
+```{r}
+ukraine = cvbase[cvbase$coded_country=="Ukraine",]
+
+global2 = cvbase
+global = cvbase[cvbase$coded_country!="Ukraine",]
+cvbase$coded_country[cvbase$coded_country!="Ukraine"] <- "Global"
+tidyDf = cvbase %>% pivot_longer(!coded_country, names_to = "num", values_to = "number")
+```
+
+Next we will be looking at the overall statistics for the pro-social behaviors of both Ukraine and Globally.
+
+```{r}
+pro_social = global[,51:54]
+pro_social_global = na.omit(pro_social) # Omitting data values with NA
+
+
+pro_social_focus = ukraine[, 51:54]
+pro_social_focus = na.omit(pro_social_focus) # Omitting data values with NA
+
+# Finding the mean value of all social behaviours
+mean_value = c(mean(pro_social_global[,1]), mean(pro_social_focus[,1]), mean(pro_social_global[,2]),mean(pro_social_focus[,2]),mean(pro_social_global[,3]), mean(pro_social_focus[,3]),mean(pro_social_global[,4]), mean(pro_social_focus[,4]))
+
+Behaviours = c(rep("Helping others", 2), rep("Making Donations", 2), rep("Protecting Vulnerable Groups",2), rep("Making Personal Sacrifices", 2))
+
+values = rep(c("Global", "Ukraine"), 2)
+
+mean_data2 = data.frame(Behaviours, values, mean_value)
+
+p_s1 = table(pro_social_global$c19ProSo01)
+p_s1 = as.data.frame(p_s1)
+p_s1_ukraine = as.data.frame(table(pro_social_focus$c19ProSo01))
+
+p_s2 = as.data.frame(table(pro_social_global$c19ProSo02))
+p_s2_ukraine = as.data.frame(table(pro_social_focus$c19ProSo02))
+p_s3 = as.data.frame(table(pro_social_global$c19ProSo03))
+p_s3_ukraine = as.data.frame(table(pro_social_focus$c19ProSo03))
+p_s4 = as.data.frame(table(pro_social_global$c19ProSo04))
+p_s4_ukraine = as.data.frame(table(pro_social_focus$c19ProSo04))
+
+
+
+p1 = ggplot(p_s1, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Helping others (Global)")
+
+p2 = ggplot(p_s1_ukraine, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Helping others (Ukraine)")
+
+p3 = ggplot(p_s2, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Making donations (Global)")
+
+p4 = ggplot(p_s2_ukraine, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Making donations (Ukraine)")
+
+p5 = ggplot(p_s3, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Protecting groups (Global)")
+
+p6 = ggplot(p_s3_ukraine, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Protecting groups (Ukraine)")
+
+p7 = ggplot(p_s4, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Making personal scacrifices (Global)")
+
+p8 = ggplot(p_s4_ukraine, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Making personal sacrifices (Ukraine)")
+
+p_final = ggarrange(p1,p2,p3,p4,
+                   ncol=2, nrow=2)
+p_final2 = ggarrange(p5,p6,p7,p8,
+                     ncol=2, nrow=2)
+
+p_final
+p_final2
+
+
+
+ggplot(mean_data2, aes(fill=values, x=mean_value , y=Behaviours)) + geom_bar(position="dodge", stat="identity") + xlab("Mean Value")
+
+
+```
+
+```{r}
+pro1= bwplot(~c19ProSo01| which, make.groups(pro_social_global, pro_social_focus))
+pro2= bwplot(~c19ProSo02| which, make.groups(pro_social_global, pro_social_focus))
+pro3= bwplot(~c19ProSo03| which, make.groups(pro_social_global, pro_social_focus))
+pro4= bwplot(~c19ProSo04| which, make.groups(pro_social_global, pro_social_focus))
+
+pro_total = ggarrange(pro1,pro2,pro3,pro4,
+                      nrow=2,ncol=2)
+
+pro_total
+```
+
+Based on the graphs above, we can clearly see that Ukraine on average has a less positive outlook towards their proSocial behaviour compared to the global average. Ukraine for all of the 4 pro-social behaviours chose that they are less likely to agree towards doing pro-social behaviors.
+
+Based on the box and whisker plots here we can see that the first and third quartile of all the behaviors are lower than that of the global dataset.
+
+Let's compare on how COVID-19 has affected the feelings of the people that took the survey.
+
+First off, we will be comparing the feelings of their emotions, and how their emotions have been impacted due to COVID-19,
+
+```{r}
+global_affect = global[1:11]
+
+ukraine_affect = ukraine[1:11]
+
+affect_mean_global = colMeans(global_affect, na.rm = TRUE)
+affect_mean_ukraine = colMeans(ukraine_affect, na.rm = TRUE)
+affect_mean_global = c(affect_mean_global)
+
+
+affect_diff = affect_mean_global - affect_mean_ukraine
+
+barplot_diff = barplot(affect_diff, ylim = c(-0.5, 0.5), cex.names = .5, main = "Difference in Emotions (Global Mean - Ukraine Mean)")
+
+ggplot(tidyDf %>% filter(num%in%c('affAnx', 'affBor','affCalm','affContent','affDepr','affEnerg','affExc','affNerv','affExh','affInsp','affRel')), aes(num, number, fill = coded_country)) + geom_boxplot() + scale_y_continuous(name = "Value") + scale_x_discrete(name = "Affect") + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) 
+
+par(mfrow=c(1,2))
+barplot = barplot(affect_mean_global, ylim = c(0,3), cex.names = .5, main = "Emotions (Global)")
+abline(h=c(3), col="red")
+barplot_focus = barplot(affect_mean_ukraine,ylim = c(0,3), cex.names = .5, main = "Emotions (Ukraine)")
+abline(h=c(3), col="red")
+```
+
+Based on the data given, Generally Negative emotions are higher across the board as compared to positive emotions. We can see that affAnx, affNerv and affBor are higher than affExc, affContent, affEnerg and affInsp. While Calm, Content and affRel seems to be not as affected. This could be because of the initial stages of COVID-19 where everyone was able to stay at home instead of going out that gives out an initial burst of calmness and relaxation.
+
+We can see that Ukrainians generally are more positive in their feelings on how COVID-19 has affected them than the mean, with the global mean usually higher on negative emotions such as being anxious, bored, depressed, nervous etc while being lower for positive emotions such as being calm, content and energetic. Relaxed is, however, the only outlier here. This is not a good indicator of overall pro_social behavior, as Ukraine has more positive outlook in their feelings compared to the global average, contradicting this with their Pro-social behaviour.
+
+Let's move on further into analyzing and comparing their satisfaction in life.
+
+```{r}
+global_satisfaction = global[37:39]
+ukraine_satisfaction = ukraine[37:39]
+
+global_happiness = as.data.frame(table(global_satisfaction$happy))
+ukraine_happiness = as.data.frame(table(ukraine_satisfaction$happy))
+
+happy1 = ggplot(global_happiness, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Happiness Rating (Global)")
+
+happy2 = ggplot(ukraine_happiness, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Happiness Rating (Ukraine)")
+
+global_happiness_mean = as.data.frame(colMeans(global_satisfaction[1], na.rm = TRUE))
+
+colnames(global_happiness_mean)[1] = "Mean"
+
+ukraine_happiness_mean = as.data.frame(colMeans(ukraine_satisfaction[1], na.rm = TRUE))
+colnames(ukraine_happiness_mean)[1] = "Mean"
+
+happiness_mean = rbind(global_happiness_mean, ukraine_happiness_mean)
+
+tags = c("Global Mean", "Ukraine Mean")
+
+happiness_mean = cbind(happiness_mean, tags)
+
+happy5 = ggplot(happiness_mean, aes(x=`tags`, y=`Mean`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Happiness Mean Values")
+
+
+happy3 = bwplot(global_satisfaction$happy)
+happy4 = bwplot(ukraine_satisfaction$happy)
+
+
+sat1 = qplot(lifeSat, data = global_satisfaction, geom="histogram", xlab = "Global Life Satisfaction", binwidth = 0.5)
+sat2 = qplot(lifeSat, data = ukraine_satisfaction, xlab = "Ukraine Life Satisfaction", binwidth = 0.5) 
+sat3 = bwplot(global_satisfaction$lifeSat)
+sat4 = bwplot(ukraine_satisfaction$lifeSat)
+
+global_satisfaction_mean = as.data.frame(colMeans(global_satisfaction[2], na.rm = TRUE))
+
+
+colnames(global_satisfaction_mean)[1] = "Mean"
+
+ukraine_satisfaction_mean = as.data.frame(colMeans(ukraine_satisfaction[2], na.rm = TRUE))
+
+colnames(ukraine_satisfaction_mean)[1] = "Mean"
+
+sat_mean = cbind(rbind(global_satisfaction_mean, ukraine_satisfaction_mean), tags)
+
+
+sat5 = ggplot(sat_mean, aes(x=`tags`, y=`Mean`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Life Satisfaction Mean")
+
+happy6 = ggarrange(happy1, happy2, happy3, happy4,
+                   nrow=2, ncol=2)
+
+
+sat3 = ggarrange(sat1,sat2, sat5,
+                 nrow=2,ncol=2)
+
+happy6
+happy5
+sat3
+```
+
+From here we can see that Ukrainians have a lower life satisfaction rating compared to the Global Mean while their happiness is slightly lower than the global average. Box and Whisker plots of the two attributes show the same values. This means that generally the Ukrainians are a bit less optimistic on how their life is going on so far as compared to everyone. This may be tied towards their financial situation or how COVID-19 has impacted them.
+
+Let us look at their MLQ scores as well
+
+```{r}
+mlq_g = global_satisfaction[3]
+mlq_u = ukraine_satisfaction[3]
+
+mlq_g = na.omit(mlq_g)
+mlq_u = na.omit(mlq_u)
+
+MLQ_Global = colMeans(mlq_g)
+MLQ_Ukraine = colMeans(mlq_u)
+
+barplot(c(MLQ_Global,MLQ_Ukraine), names.arg=c("Global MLQ Mean", "Ukraine MLQ Mean"))
+par(mfrow=c(1,2))
+boxplot(mlq_g, xlab = "MLQ Values (Global)")
+boxplot(mlq_u, xlab = "MLQ Values (Ukraine)")
+```
+
+For MLQ the values are really similar, with the mean of Ukraine being slightly lower than that of the global average while the box and whisker plots show the same first quartile, third quartile and median.
+
+Overall, Live Satisfaction seems relatively similar, now lets dive into what the people of Ukraine think the likelihood of getting COVID-19 and the likelihood that their personal situation will get worse due to the economic consequences of the coronavirus.
+
+```{r}
+global_likelihood = global[12:13]
+
+ukraine_likelihood = ukraine[12:13]
+
+likelihood_mean_global = colMeans(global_likelihood, na.rm = TRUE)
+likelihood_mean_ukraine = colMeans(ukraine_likelihood, na.rm = TRUE)
+
+likelihood_diff = likelihood_mean_global - likelihood_mean_ukraine
+
+barplot(likelihood_diff, main ="Difference in Likelihood")
+
+par(mfrow=c(1,2))
+barplot(likelihood_mean_global, ylim=c(0,5), xlab = "Likelihood Mean (Global)")
+barplot(likelihood_mean_ukraine, ylim=c(0,5), xlab = "Likelihood Mean (Ukraine)")
+par(mfrow=c(1,2))
+boxplot(global_likelihood, xlab = "Global Likelihood")
+boxplot(ukraine_likelihood, xlab = "Ukraine Likelihood")
+```
+
+When checking at likelihood statistics. We can see however that Ukrainians are less likely to think that they will be infected with the coronavirus, but think that they are more likely for their personal situation to worsen due to the economic consequences of the coronavirus.
+
+Box and Whisker plots for PLRAC19, however, see that Global first and third quartile values are closer to being less likely (2 and 5) while Ukraine has more variance in its collected data. This could indicate that Ukrainians are more varied in their opinion of potentially getting infected with the coronavirus. Outliers is still the 8th value. In both Global and Ukraine datasets, not many people has gotten COVID-19 at the time of the survey.
+
+Box and Whisker plots for PLRAEco see a more normal trend with the middle 50% of surveyors at Ukraine being higher than the middle 50% of surveyors globally. The median for Ukraine being higher as well.
+
+Ukrainians seem to not think that they would get COVID-19, but are more likely to think that their personal situation would worsen due to the virus. There seems to form a pattern here that Ukrainians are more sensitive towards their financial health. This may be a key indicator in finding predictors for Pro-Social Behaviors.
+
+For that let's dive into the Job Insecurity aspect and their financial strain. As in, do Ukrainians agree or disagree about their job security?
+
+```{r}
+global_job_security = global[17:20]
+ukraine_job_security = ukraine[17:20]
+
+job_security_global_mean = colMeans(global_job_security, na.rm = TRUE)
+job_security_ukraine_mean = colMeans(ukraine_job_security, na.rm = TRUE)
+
+job_security_diff = job_security_global_mean - job_security_ukraine_mean
+
+sd_job_uk = sd(as.numeric(unlist(ukraine_job_security)), na.rm = TRUE)
+
+sd_job_global = sd(as.numeric(unlist(global_job_security)), na.rm = TRUE)
+
+barplot(job_security_diff, main=  "Differences in Mean for Job Insecurity")
+
+par(mfrow=c(1,2))
+barplot(job_security_global_mean, xlab ="Job Security Mean (Global)")
+barplot(job_security_ukraine_mean, xlab="Job Security Mean (Ukraine)")
+
+job_1 = bwplot(~jbInsec01 | which, make.groups(global, ukraine))
+job_2 = bwplot(~jbInsec02 | which, make.groups(global, ukraine))
+job_3 = bwplot(~jbInsec03 | which, make.groups(global, ukraine))
+job_4 = bwplot(~jbInsec04 | which, make.groups(global, ukraine))
+job_total = ggarrange(job_1, job_2, job_3, job_4,
+                   ncol=2, nrow=2)
+
+job_total
+```
+
+From the data above, Ukrainians believe they are more likely to lose their job soon as jbInsec01 is higher while they are less likely to think that they will keep their job (jbInsec02 is lower). They are also more likely to agree that they are insecure about the future of their job (jbInsec03 is higher) and more of them agree that they have already lost their job (jbInsec04 is higher).
+
+Based on the box and whisker plots that we have gotten here, for the question: "Chances are, I will soon lose my job" (jbInsec01), Ukrainians are more likely to choose between Disagree and Neither agree nor disagree while the global average chooses more between Strongly Disagree and Neither agree nor disagree. However only a small number of Ukrainians stated that they Strongly agree about losing their job, meaning that standard deviation of the opinions of Ukrainians are generally more tightly knitted. This comes to no surprise as they go through a similar situation in their country.
+
+jbInsec02 and jbInsec03 has same statistics for both global and Ukrainian values in their box and whisker plots. jbInsec04's median on the global statistic is at the lowest value, -2 as compared to -1 for Ukraine.
+
+Let us examine their Perceived Financial Strain (PFS) as well
+
+```{r}
+global_financial_strain = global[31:33]
+ukraine_financial_strain = ukraine[31:33]
+
+financial_strain_global_mean = colMeans(global_financial_strain, na.rm = TRUE)
+financial_strain_ukraine_mean = colMeans(ukraine_financial_strain, na.rm = TRUE)
+
+finance_strain_global_frequency_01 = as.data.frame(table(global_financial_strain$PFS01))
+finance_strain_ukraine_frequency_01 = as.data.frame(table(ukraine_financial_strain$PFS01))
+finance_strain_global_frequency_02 = as.data.frame(table(global_financial_strain$PFS02))
+finance_strain_ukraine_frequency_02 = as.data.frame(table(ukraine_financial_strain$PFS02))
+finance_strain_global_frequency_03 = as.data.frame(table(global_financial_strain$PFS03))
+finance_strain_ukraine_frequency_03 = as.data.frame(table(ukraine_financial_strain$PFS03))
+
+f01 = ggplot(finance_strain_global_frequency_01, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("I am financially strained (Global)")
+
+f01_u = ggplot(finance_strain_ukraine_frequency_01, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("I am financially strained (Ukraine)")
+
+f02 = ggplot(finance_strain_global_frequency_02, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("current financial situation (Global)")
+
+f02_u = ggplot(finance_strain_ukraine_frequency_02, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("current financial situation (Ukraine)")
+
+f03 = ggplot(finance_strain_global_frequency_03, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("difficulties paying for expenses (Global)")
+
+f03_u = ggplot(finance_strain_ukraine_frequency_03, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("difficulties paying for expenses (Ukraine)")
+
+ggplot(tidyDf %>% filter(num%in%c('PFS01', "PFS02", "PFS03")), aes(num, number, fill = coded_country)) + geom_boxplot() + scale_y_continuous(name = "Value") + scale_x_discrete(name = "Perceived Financial Strain")
+
+
+figure = ggarrange(f01, f01_u, f02, f02_u, f03, f03_u,
+                   ncol=2, nrow=3)
+figure
+
+par(mfrow=c(1,2))
+barplot(financial_strain_global_mean, main="Global", ylim=c(-0.4,0.7))
+barplot(financial_strain_ukraine_mean, main="Ukrainian", ylim=c(0, 0.9))
+
+
+```
+
+Based on the graphs above. It follows correctly with our previous analysis on Job Insecurity. Ukrainians have higher perceived financial strain. Here they are more likely to agree that they are financially strained (PFS01), that they think more often on their financial situation (PFS02) and that they have difficulties paying for their expenses (PFS03) compared to the global average. Box and Whisker plots show that the distribution however is mostly the same.
+
+Trust in the Community and Government may very well likely be a good correlation towards Pro-Social Behavior. We hypothesize that the more likely they trust in their community and government for handling COVID-19, the more likely they would be more willing to help out other people (Pro-Social Behavior). Let us analyze the statistics.
+
+```{r}
+trust_global = cbind(global$trustGovCtry, global$trustGovState)
+trust_ukraine = cbind(ukraine$trustGovCtry, ukraine$trustGovState)
+
+trust_gov_global = as.data.frame(table(trust_global[,1]))
+trust_gov_ukraine = as.data.frame(table(trust_ukraine[,1]))
+
+trust_comm_global = as.data.frame(table(trust_global[,2]))
+trust_comm_ukraine = as.data.frame(table(trust_ukraine[,2]))
+
+ggplot(tidyDf %>% filter(num%in%c("trustGovCtry", "trustGovState")), aes(num, number, fill = coded_country)) + geom_boxplot() + scale_y_continuous(name = "Value") + scale_x_discrete(name = "Trust in Government/Community for handling COVID-19")
+
+
+
+t01 = ggplot(trust_gov_global, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Trust in Government (Global)")
+
+t01u = ggplot(trust_gov_ukraine, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Trust in Government (Ukraine)")
+
+t02 = ggplot(trust_comm_global, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Trust in Community (Global)")
+
+t02u = ggplot(trust_comm_ukraine, aes(x = `Var1`, y = `Freq`)) + geom_bar(position="dodge", stat="identity") + ggtitle("Trust in Community (Ukraine)")
+
+t1 = ggarrange(t01, t01u, t02, t02u,
+               nrow=2, ncol=2)
+
+t1
+```
+
+We can see here that the Trust in both Government and Community is lower in Ukraine than the global score. Generally Ukrainians trust their community and their government less in whether they would be taking the right measures to tackle COVID-19. What is interesting to note is that the 5th value, meaning that the person responding trusts the government and/or community a great deal for handling the pandemic, is rarely seen from Ukrainians.
+
+This may be a useful indicator of finding the reason on why Pro Social behaviors are lower in Ukraine. Could there be a correlation here? We will be looking at this in 2(b)
+
+Next, let's dive into the community injunctive norms for the coronavirus. This data shows how much they would agree that the community should self-isolate (c19NormShould) and do self-isolate (c19NormDo), and to what extent does their community develop strict rules to fight against COVID (c19IsStrict), punish people who deviate from such rules (c19IsPunish) and how organized they are handling the pandemic (c19IsOrg).
+
+```{r}
+corona_norms = global[40:44]
+ukraine_norms = ukraine[40:44]
+
+norm1 = ggplot(tidyDf %>% filter(num%in%c('c19NormShould', "c19NormDo")), aes(num, number, fill = coded_country)) + geom_boxplot() + scale_y_continuous(name = "Value") + scale_x_discrete(name = "Corona Community Injunctive Norms")
+
+norm2 = ggplot(tidyDf %>% filter(num%in%c("c19IsStrict", "c19IsPunish", "c19IsOrg")), aes(num, number, fill = coded_country)) + geom_boxplot() + scale_y_continuous(name = "Value") + scale_x_discrete(name = "Corona Community Injunctive Norms")
+
+ggarrange(norm1, norm2,
+          nrow=2,ncol=1)
+```
+
+The box and whisker plots show that Ukrainians on general do not self-isolate as much as the Global population. In fact, less of the people surveyed in Ukraine think that they should be self isolating.
+
+As for how they think their community is handling against the virus, it shows that Ukrainians think that the community is making strict rules to the same extent as their Global counterparts. However, they are less likely to enforce it as c19IsPunish is lower. Ukrainians also think that their community is not as well organized in handling the pandemic as compared towards other countries.
+
+What about their social discontent? Since there may be correlation between trust in government/community and pro-social behavior, surely social discontent does too?
+
+```{r}
+ggplot(tidyDf %>% filter(num%in%c('disc01', "disc02", 'disc03')), aes(num, number, fill = coded_country)) + geom_boxplot() + scale_y_continuous(name = "Value") + scale_x_discrete(name = "Social Discontent")
+```
+
+Social Discontent is generally the same in their statistics, the only difference here is disc03, where the median is lower than that of the Global Average. This means that Ukrainians are slightly less satisfied with society than everyone else.
+
+Lastly we will be diving into the statistics of their employment level.
+
+```{r}
+employ = global[21:30]
+ukraine_employ = ukraine[21:30]
+
+ones_count <- employ %>% 
+  summarise(across(everything(), ~sum(. == 1), .names = "{col}"))
+
+ones_count2 <- ukraine_employ %>% 
+  summarise(across(everything(), ~sum(. == 1), .names = "{col}"))
+
+ones_count_long <- ones_count %>% 
+  pivot_longer(cols = everything(), names_to = "column", values_to = "ones_count")
+
+ones_count_long2 <- ones_count2 %>% 
+  pivot_longer(cols = everything(), names_to = "column", values_to = "ones_count")
+
+ggplot(ones_count_long, aes(x = column, y = ones_count, fill = column)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Status", y = "Frequency", title = "Frequency of Employment Status (Global)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  guides(fill = FALSE)
+
+ggplot(ones_count_long2, aes(x = column, y = ones_count, fill = column)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Status", y = "Frequency", title = "Frequency of Employment Status (Ukraine)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + 
+  guides(fill = FALSE)
+```
+
+From our data most people have employstatus_3 checked, meaning that most are working at 40 or more hours a week. What is interesting to see is that Ukraine's employstatus_4 value is relatively higher, signalling that they are more unemployed people in Ukraine that is actively looking for a job. This could contribute towards their higher perceived financial strain (PFS) and Job Insecurity (jbInSec) that we have analyzed earlier. There are a lesser proportion of Students from Ukraine who have taken the survey that the global average as well.
+
+Note that we have omitted Gender and Education from our analysis. This is because we will not be considering genders in our study due to the potential of stereotyping genders. This is also because in further analysis, gender and education do not seem to correlate towards pro-social behaviors.
+
+Question 2(b)
+
+There may be several reasons on why this may be the case, and we will be diving into that deeper. First off, let's build a linear model with the pro-social behaviors being the label, and the other predictors as the factors to determine the p-value of these predictors to state which predictors are the strongest.
+
+```{r}
+
+global_lm = global
+
+pro_social_01 = lm(c19ProSo01~., global_lm)
+pro_social_02 = lm(c19ProSo02~., global_lm)
+pro_social_03 = lm(c19ProSo03~., global_lm)
+pro_social_04 = lm(c19ProSo04~., global_lm)
+
+model1 = summary(pro_social_01)
+model2 = summary(pro_social_02)
+model3 = summary(pro_social_03)
+model4 = summary(pro_social_04)
+
+p_values1 <- model1$coefficients[, 4]
+p_values2 <- model2$coefficients[, 4]
+p_values3 <- model3$coefficients[, 4]
+p_values4 <- model4$coefficients[, 4]
+
+p_data1 <- data.frame(variable = names(p_values1), p_value = p_values1)
+p_data2 <- data.frame(variable = names(p_values2), p_value = p_values2)
+p_data3 <- data.frame(variable = names(p_values3), p_value = p_values3)
+p_data4 <- data.frame(variable = names(p_values4), p_value = p_values4)
+
+p_data1 <- head(p_data1[order(p_data1$p_value), ], 10)
+p_data2 <- head(p_data2[order(p_data2$p_value), ], 10)
+p_data3 <- head(p_data3[order(p_data3$p_value), ], 10)
+p_data4 <- head(p_data4[order(p_data4$p_value), ], 10)
+
+p_plot1 <- ggplot(p_data1, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo01)")
+
+p_plot2 <- ggplot(p_data2, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo02)")
+
+p_plot3 <- ggplot(p_data3, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo03)")
+
+p_plot4 <- ggplot(p_data4, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo04)")
+
+ggarrange(p_plot1, p_plot2, p_plot3, p_plot4,
+          nrow=2, ncol=2)
+```
+
+Based on the data that we have gotten above. We are trying to find the strongest predictors that would influence the Pro-Social behaviours in a global-scale. We will be locating the strongest predictors that would affect the score of the pro-social behaviours using the p-value. We can see that the pro-social predictors heavily affect each other on the score that they would get. Let's dive deeper to see each of the other strong predictors using a correlation matrix.
+
+```{r}
+correlations = cor(cbind(global[1:49], global[51:54]), use = "complete.obs")
+
+melted_correlations = melt(correlations)
+
+
+melted_correlations = melted_correlations[melted_correlations$Var2 %in% c("c19ProSo01", "c19ProSo02", "c19ProSo03", "c19ProSo04"),]
+
+melted_correlations1 = melted_correlations[melted_correlations$Var1 %in% c("affAnx", "affCalm", "affContent", "affBor",
+                                                                           "affEnerg", "affDepr", "affExc", "affNerv", "affExh", "affInsp", "affRel",
+                                                                           "PLRAC19", "PLRAEco", "disc01", "disc02", "disc03", "jbInsec01", "jbInsec02",
+                                                                           "jbInsec03", "jbInsec04"),]
+
+
+melted_correlations2 = melted_correlations[melted_correlations$Var1 %in% c("PFS01", "PFS02", "PFS03", "fail01", "fail02", "fail03", "happy", "lifeSat", "MLQ",
+                                                                           "c19NormShould", "c19NormDo", "c19IsStrict", "c19IsPunish", "c19IsOrg", "trustGovCtry",
+                                                                           "trustGovState", "gender", "age", "edu"),]
+
+
+heatmap1 <- ggplot(data = melted_correlations1, aes(x = Var1, y = Var2, label = round(value, 1))) +
+  geom_tile(fill = "white") +
+  geom_text(size = 4, color = "black") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  coord_fixed()
+
+heatmap2 <- ggplot(data = melted_correlations2, aes(x = Var1, y = Var2, label = round(value, 1))) +
+  geom_tile(fill = "white", width = 1.5) +
+  geom_text(size = 4, color = "black") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  coord_fixed()
+
+
+ggarrange(heatmap1, heatmap2,
+          nrow = 2, ncol = 1)
+
+
+```
+
+From the plots above and the summary of the lm model that we have gotten we are able to find the strongest predictors based on the correlation and the p-value of the given predictors.
+
+-   c19ProSo01
+
+    -   affRel (-0.9)
+
+    -   disc01 (1)
+
+    -   c19IsPunish (0.9)
+
+    -   jbInSec02\
+
+-   c19ProSo02
+
+    -   fail02 (0.9)
+
+    -   c19NormDo (0.8)
+
+    -   trustGovState (0.9)
+
+-   c19ProSo03
+
+    -   jbInSec02 (0.9)
+
+    -   jbInSec03 (1)
+
+    -   jbInSec04 (0.9)
+
+    -   trustGovCtry (0.9)
+
+-   c19ProSo04
+
+    -   affContent (1)
+
+    -   affDepr (1)
+
+    -   disc02 (1)
+
+    -   PFS02 (1)
+
+    -   c19NormDo (1)
+
+However, we can notice that the higher correlations here do not necessarily equal to the lowest p-values that we gotten in the linear model for each of the behaviors. We will be using the predictors based on the p-values instead as they have been tested to be highly against the null hypothesis. This is due to their extremely low P-values that will indicate how likely they are to be as a strong predictor.
+
+```{r}
+ukraine_lm = cbind(ukraine[,1:49], ukraine[,51:54])
+
+
+pro_social_01u = lm(c19ProSo01 ~ ., ukraine_lm)
+pro_social_02u = lm(c19ProSo02 ~ ., ukraine_lm)
+pro_social_03u = lm(c19ProSo03 ~ ., ukraine_lm)
+pro_social_04u = lm(c19ProSo04 ~ ., ukraine_lm)
+
+model1u = summary(pro_social_01u)
+model2u = summary(pro_social_02u)
+model3u = summary(pro_social_03u)
+model4u = summary(pro_social_04u)
+
+p_values1u <- model1u$coefficients[, 4]
+p_values2u <- model2u$coefficients[, 4]
+p_values3u <- model3u$coefficients[, 4]
+p_values4u <- model4u$coefficients[, 4]
+
+p_data1u <- data.frame(variable = names(p_values1u), p_value = p_values1u)
+p_data2u <- data.frame(variable = names(p_values2u), p_value = p_values2u)
+p_data3u <- data.frame(variable = names(p_values3u), p_value = p_values3u)
+p_data4u <- data.frame(variable = names(p_values4u), p_value = p_values4u)
+
+p_data1u <- head(p_data1u[order(p_data1u$p_value), ], 10)
+p_data2u <- head(p_data2u[order(p_data2u$p_value), ], 10)
+p_data3u <- head(p_data3u[order(p_data3u$p_value), ], 10)
+p_data4u <- head(p_data4u[order(p_data4u$p_value), ], 10)
+
+p_plot1u <- ggplot(p_data1u, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo01)")
+
+p_plot2u <- ggplot(p_data2u, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo02)")
+
+p_plot3u <- ggplot(p_data3u, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo03)")
+
+p_plot4u <- ggplot(p_data4u, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo04)")
+
+ggarrange(p_plot1u, p_plot2u, p_plot3u, p_plot4u,
+          nrow=2, ncol=2)
+```
+
+We can still determine that the pro-social values do affect each other in Ukraine as well. For external factors, let's take a deeper dive into this.
+
+-   c19ProSo01 (Helping others)
+
+    -   Globally MLQ is the strongest predictor along with trustGovState, c19NormDo and PLRAC19, PLRACco and employstatus_10. This is lastly followed by affAnx.
+
+    -   For Ukraine Employ Status 3 and 1 seems to be the strongest predictor followed by jbInSec04, employstatus_2, jbInSec01 and employstatus_8
+
+    -   Global statistics show that they are more likely to use help based on the how the community handles COVID-19 and how they agree on whether they should be isolating and engaging in social distancing. They also factor into their own account of how likely they will be infected with the coronavirus.
+
+    -   Ukraine, on the other hand focuses more strongly in the employment status and their job insecurity. Citing that helping others depend highly on how well they can sustain the pandemic themselves financially. This is interesting to see noting that Global stats favor more on community while Ukrainians favor more on personal financial security.
+
+-   c19ProSo02 (Making Donations)
+
+    -   Globally c19NormShould is the strongest predictor followed by PFS01, MLQ and trustGovCtry
+
+    -   For Ukraine employstatus_6 is the strongest predictor, followed by affCalm, employstatus_2 and fail01. PFS01 also exists as the 10th strongest predictor
+
+    -   Generally we can determine that Financial hardship factors whenever someone would be more open to donating. Global Statistics see on whether the community is doing their part in isolating, whether they are financially strained, whether their life has purpose and their trust in the government for handling COVID-19.
+
+    -   Ukrainians factor in their employment status and how they are feeling in terms of calmness on whether they would be more open to making donations. They also depend on whether people like them have been helped out before.
+
+-   c19ProSo03 (Protecting Vulnerable Groups)
+
+    -   Globally age is a huge factor in contributing to this label. This is followed by trustGovCtry, c19NormShould, c19IsPunish and trustGovState and PFS02. We are disregarding Malta here as we are assuming countries do not play as a strong predictor
+
+    -   Ukraine has PLRAC19 as its strongest predictor. Followed by employment status 9 and 7 and lifeSat.
+
+    -   Age plays an interesting role in both datasets. What is interesting is that while the Ukrainian dataset does not put age as a strong predictor. employment status 9 and 7 denotes students and retired people, respectively, to be strong predictors in protecting vulnerable groups. This can be traced back to the retired demographic who are usually older and are more prone to serious complications due to COVID-19 and the younger demographic who doesn't. This also contributes towards the PLRAC19 attribute, as the more they are likely to be infected, the more likely they think of themselves as vulnerable people.
+
+    -   Globally people depend on their trust in the community and government on their decision to protect vulnerable groups. Community is a huge underlying factor here. Apart from that Corona Community Injunctive norms such as c19NormShould and c19isPunish. As in it depends on how the community has performed in order to help out their surroundings.
+
+-   c19ProSo04 (Making Personal Sacrifices to prevent spread)
+
+    -   Globally c19NormShould, disc02, age, PFS02, and trustGovCtry are the strongest predictors
+
+    -   Ukraine has age being a main cause as well, followed by jbInSec04 and disc03
+
+    -   There seems to be a trend that Globally people make choices depending on how well their community responds towards the pandemic as well as Financial Hardship.
+
+    -   Age may seem like a likely predictor to how likely that one will make personal sacrifices to prevent spread. Let's dive into that more below
+
+```{r}
+pro_age = cbind(age= global$age, global[,51:54])
+
+pp04 = pro_age %>% group_by(age, c19ProSo04) %>% summarise(frequency = n())
+pp04 = na.omit(pp04)
+
+ggplot(pp04, aes(x= factor(c19ProSo04), y = frequency, fill = factor(c19ProSo04))) + geom_bar(stat = "identity") + facet_wrap(~age, ncol = 2, nrow = 4) + ggtitle("c19ProSo04 scores categorized by Age groups (Global)")
+
+pro_age_ukraine = cbind(age = ukraine$age, ukraine[,51:54])
+
+pp05 = pro_age_ukraine %>% group_by(age, c19ProSo04) %>% summarise(frequency = n())
+pp05 = na.omit(pp05)
+
+ggplot(pp05, aes(x= factor(c19ProSo04), y = frequency, fill = factor(c19ProSo04))) + geom_bar(stat = "identity") + facet_wrap(~age, ncol = 2, nrow = 4) + ggtitle("c19ProSo04 scores categorized by Age groups (Ukraine)")
+
+```
+
+From the graphs above, we can see that Ukrainians are less likely to make personal sacrifices to prevent the spread of COVID-19. We can see this spike in groups 1, 2, 3 and 4, especially in age group 2 (25-34) where there exists a group which disagree with making personal sacrifices. The Global range however shows that people agree more that they should be making sacrifices to prevent the spread of the coronavirus.
+
+Overall what we can conclude is that Corona Community Injunctive norms affect more on pro-social behaviors that revolve around socially helping others and oneself as well as trust in government and community. Age plays a factor in vulnerable groups most while Financial situations are the main factor in helping others in Ukraine. Financial factors play an important role in donating to help others in both Global and Ukraine datasets and in making personal sacrifices too. This can be attributed most likely because they are unable to make any sort of sacrifice without heavily affecting their livelihood in an adverse manner. Ukraine is a bit more sensitive towards their reluctance to donate and help out likely due to their own financial strain.
+
+[Clustering of groups of countries based on indicators (Question 3a)]{.underline}
+
+Now, let's cluster and find countries based on similar indicators towards Ukraine and their statistics.
+
+We will be using the Global Health Security Index data set to help in clustering countries of similar GHS scores. GHS is the assessment for the countries' global health security on how well they are prepared to respond to disease outbreaks from a score of 0 to 100. The hypothesis is that countries with similar GHS scores may link to similarities in Pro Social Behavior as their country's readiness to respond to outbreaks is around the same. This data is retrieved from the Global Security Health Index which can be found here: <https://www.ghsindex.org/>
+
+We will be comparing GHS scores in the year 2021. This is because that COVID-19 does not exist in 2019, and there is no available data for the year 2020. The data set is as follows
+
+```{r}
+ghs = read.csv("2021-GHS-Index-April-2022.csv")
+ghs
+```
+
+```{r echo = TRUE}
+ghs = ghs[ghs$Year == "2021",]
+ghs[,3] = scale(ghs[,3])
+
+
+silhouette_score <- function(k) {
+  km = kmeans(ghs[, c("OVERALL.SCORE")], centers = k, nstart = 25)
+  ss = silhouette(km$cluster, dist(ghs[, c("OVERALL.SCORE")]))
+  mean(ss[,3])
+}
+
+k <- 2:10
+avg_sil <- sapply(k, silhouette_score)
+plot(k, type='b', avg_sil, xlab = "Number of Clusters", ylab= "Average Silhouette Scores", xlim=c(2,10))
+```
+
+From the data above, having 2 clusters give the best score by far but we will be using 9 clusters instead to find more specific countries. Let's apply this into our data set
+
+```{r echo = TRUE}
+kmeans_result = kmeans(ghs[,c("OVERALL.SCORE")], centers = 9, nstart = 25)
+
+ghs$cluster = kmeans_result$cluster
+
+ukraine_cluster = ghs[ghs$Country == "Ukraine",]
+num = ukraine_cluster$cluster
+ukraine_cluster2 = ghs[ghs$Country == "United Arab Emirates",]
+
+a = ghs[ghs$cluster == num,]
+
+
+ghs$Country = factor(ghs$Country)
+kmeans_result$cluster = as.factor(kmeans_result$cluster)
+ggplot(ghs,aes(Country,OVERALL.SCORE, color = kmeans_result$cluster)) + geom_point()
+```
+
+We are able to identify these few countries that are in the same cluster as Ukraine.
+
+```{r echo = TRUE}
+a$Country
+```
+
+For comparison, we will be choosing Vietnam, India and United Arab Emirates.
+
+```{r}
+global2 = read.csv("PsyCoronaBaselineExtract.csv")
+global2 <- global2[sample(nrow(global2), 40000), ] # 40000 row
+global2[,21:30][is.na(global2[,21:30])] = 0
+uae = global2[global2$coded_country == "United Arab Emirates",]
+india = global2[global2$coded_country == "India",]
+vietnam = global2[global2$coded_country == "Vietnam",]
+```
+
+```{r}
+par(mfrow=c(1,2))
+boxplot(ukraine[51:54], main="Ukraine ProSo")
+boxplot(india[51:54], main ="India ProSo")
+boxplot(uae[51:54], main ="UAE ProSo")
+boxplot(vietnam[51:54], main = "Vietnam ProSo")
+```
+
+Based on the data collected, it seems that despite similar GHS scores, this does not seem to correlate to the Pro Social Behaviors. As seen here the UAE, India and Vietnam all have higher Pro Social Behavior scores in the people that took the survey as compared to Ukraine.
+
+At the time being, let us find the strongest predictors using the same method we did for each of the 4 pro social behaviors
+
+```{r}
+group_country = rbind(vietnam, india, uae)
+
+find_predictors <- function(data) {
+data = cbind(data[,1:49], data[,51:54])
+pro_social_01d = lm(c19ProSo01 ~ ., data)
+pro_social_02d = lm(c19ProSo02 ~ ., data)
+pro_social_03d = lm(c19ProSo03 ~ ., data)
+pro_social_04d = lm(c19ProSo04 ~ ., data)
+
+model1d = summary(pro_social_01d)
+model2d = summary(pro_social_02d)
+model3d = summary(pro_social_03d)
+model4d = summary(pro_social_04d)
+
+p_values1d <- model1d$coefficients[, 4]
+p_values2d <- model2d$coefficients[, 4]
+p_values3d <- model3d$coefficients[, 4]
+p_values4d <- model4d$coefficients[, 4]
+
+p_data1d <- data.frame(variable = names(p_values1d), p_value = p_values1d)
+p_data2d <- data.frame(variable = names(p_values2d), p_value = p_values2d)
+p_data3d <- data.frame(variable = names(p_values3d), p_value = p_values3d)
+p_data4d <- data.frame(variable = names(p_values4d), p_value = p_values4d)
+
+p_data1d <- head(p_data1d[order(p_data1d$p_value), ], 10)
+p_data2d <- head(p_data2d[order(p_data2d$p_value), ], 10)
+p_data3d <- head(p_data3d[order(p_data3d$p_value), ], 10)
+p_data4d <- head(p_data4d[order(p_data4d$p_value), ], 10)
+
+p_plot1d <- ggplot(p_data1d, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo01)")
+
+p_plot2d <- ggplot(p_data2d, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo02)")
+
+p_plot3d <- ggplot(p_data3d, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo03)")
+
+p_plot4d <- ggplot(p_data4d, aes(x = reorder(variable, p_value), y = p_value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  xlab("Variables") +
+  ylab("P-values") +
+  ggtitle("Lowest P-values (c19ProSo04)")
+
+ggarrange(p_plot1d, p_plot2d, p_plot3d, p_plot4d,
+          nrow=2, ncol=2) + ggtitle(data$coded_country)
+}
+
+find_predictors(group_country)
+```
+
+Due to the values of some of these countries not having enough rows, we have included all these countries into one continuous dataframe to analyse the predictors.
+
+Lets dive into this more closely:
+
+Overall the pro-social behaviors still correlate with each other. Hence we can see that their p-values are still the among the top 10 lowest predictors. We will be looking into other predictors in our analysis.
+
+-   c19ProSo01
+
+    -   employstatus_7 has the lowest p-value, followed by PLRAEco, JbInsec03 and jbInSec01. JbInSec04 also exists here as one of the strongest predictors for this group of countries.
+
+    -   For Ukraine Employ Status 3 and 1 seems to be the strongest predictor followed by jbInSec04, employstatus_2, jbInSec01 and employstatus_8
+
+    -   Job Insecurity seems to be a highlight here with both Ukraine and these group of countries having a high likelihood that Job Insecurities would affect them in helping others from COVID-19.
+
+-   c19ProSo02
+
+    -   affCalm is the strongest predictor followed by disc02, jbInsec04, PFS03, affBor, employstatus_4, c19isPunish, and affDepr
+
+    -   For Ukraine employstatus_6 is the strongest predictor, followed by affCalm, employstatus_2 and fail01. PFS01 also exists as the 10th strongest predictor
+
+    -   Feelings on how the pandemic has affected them is a main factor in deciding their decision in making donations with emphasis also on financial factors. This goes in line with the Global and Ukrainian Values who too focus more on economic factors.
+
+-   c19ProSo03
+
+    -   affExh, employstatus_3, jbInSec03, employstatus_2 are the strongest predictors. This is followed by edu, affDepr and affInsp
+
+    -   Ukraine has PLRAC19 as its strongest predictor. Followed by employment status 9 and 7 and lifeSat.
+
+    -   What is interesting to see is that the focus groups seem to depend more on their feelings and their job prospects rather than on their age and the chances of them getting COVID-19 as seen in the Ukraine and trust in community as seen in the Global dataset.
+
+-   c19ProSo04
+
+    -   edu is the strongest predictor, followed by affInsp, jbInsec04, employstatus_9, disc03 and jbInsec01
+
+    -   Ukraine has age main cause, followed by jbInSec04 and disc03.
+
+    -   Education seems to be an important factor in making a decision here.
+
+    -   From the focus group they once again depend on their feelings more than the Ukrainians on deciding whether they would make personal sacrifices to prevent the spread of the coronavirus. On what is common, they also depend on whether they are satisfied with society and their own financial status before making personal sacrifices.
+
+Overall a common theme that we can notice here is that these countries depend more on their financial situation and their feelings to make a decision on how likely they would engage in these pro-social behaviors while helping others and making donations follow a similar trend to both Ukraine and Global data, linking more towards how financially stable they are.
+
+In a nutshell, here are the results that we have gotten:
+
+-   Global Analysis shows that trust in community is one of the most important factors in deciding on their pro-social behavior. This includes Corona Community Injunctive Behavior as well. Finance also plays an important factor here.
+
+-   Ukrainians, however, follow more on their Financial Situation to decide on their pro-social behavior. This can be seen as their strongest predictors usually revolve around their economical status (employstatus, PFS, jbInSec).
+
+-   The focus countries based on clustering shows less emphasis on their trust on community as compared to those of the Global values, but also incorporates their personal feelings into the mix as shown in c19ProSo03 and c19ProSo04. While Financial Situation factors in also, as similar with Global and Ukrainian statistics, they are not as prevalent.
+
+-   Overall Ukrainians are more in line with the focus country data, as seen where Ukrainians and the people from the focus countries have in common, which is depending on their financial situation to make pro-social choices. While Global data also backs up that statement, Community is a more important factor for them in this case.
